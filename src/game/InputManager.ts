@@ -12,7 +12,7 @@
  */
 
 import { CameraState } from './GameEngine';
-import { CELL_SIZE } from '../../../shared/constants';
+import { CELL_SIZE } from '@shared/constants';
 
 const PAN_SPEED = 0.6; // pixels monde / ms à zoom 1
 const ZOOM_MIN = 0.25;

@@ -12,8 +12,8 @@
  */
 
 import { Container, Graphics, Rectangle } from 'pixi.js';
-import { TerrainType } from '../../../shared/types';
-import { CELL_SIZE, OCEAN_COLOR, NEUTRAL_COLOR, MOUNTAIN_TINT } from '../../../shared/constants';
+import { TerrainType } from '@shared/types';
+import { CELL_SIZE, OCEAN_COLOR, NEUTRAL_COLOR, MOUNTAIN_TINT } from '@shared/constants';
 
 interface CellView {
   gfx: Graphics;

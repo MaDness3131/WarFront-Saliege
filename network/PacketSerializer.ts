@@ -10,7 +10,7 @@
  * les territoires, le tout en ArrayBuffer pour minimiser la bande passante.
  */
 
-import { Territory } from '../../shared/types';
+import { Territory } from '@shared/types';
 
 /** Snapshot ultra-compact destiné à la minimap (1 octet / territoire). */
 export class MinimapEncoder {

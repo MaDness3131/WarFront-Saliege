@@ -42,7 +42,7 @@ import {
   PLAYER_COLORS,
   BUILDINGS,
   DOMINATION_WIN_RATIO,
-} from '../../../shared/constants';
+} from '@shared/constants';
 
 interface RoomOptions {
   mode?: GameMode;

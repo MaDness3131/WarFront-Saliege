@@ -12,8 +12,8 @@
 import { useEffect, useState } from 'react';
 import { GameSnapshot } from '../useGameState';
 import { socket } from '../../network/SocketClient';
-import { ServerEvent } from '../../../../shared/types';
-import { TICK_RATE } from '../../../../shared/constants';
+import { ServerEvent } from '@shared/types';
+import { TICK_RATE } from '@shared/constants';
 
 interface Notification {
   id: number;

@@ -10,8 +10,8 @@
  */
 
 import { GameSnapshot } from '../useGameState';
-import { BuildingType } from '../../../../shared/types';
-import { BUILDINGS } from '../../../../shared/constants';
+import { BuildingType } from '@shared/types';
+import { BUILDINGS } from '@shared/constants';
 
 interface ConstructionMenuProps {
   snap: GameSnapshot;

@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { GameSnapshot } from '../useGameState';
 import { socket } from '../../network/SocketClient';
-import { OCEAN_COLOR, NEUTRAL_COLOR } from '../../../../shared/constants';
+import { OCEAN_COLOR, NEUTRAL_COLOR } from '@shared/constants';
 
 interface MinimapProps {
   snap: GameSnapshot;

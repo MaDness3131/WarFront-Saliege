@@ -7,7 +7,7 @@
  */
 
 import { WorldState, PlayerSchema } from './schema';
-import { BuildingType, GameMode } from '../../../shared/types';
+import { BuildingType, GameMode } from '@shared/types';
 import {
   GOLD_PER_TERRITORY,
   GOLD_PER_CITY_LEVEL,
@@ -15,7 +15,7 @@ import {
   ARMY_UPKEEP_PER_UNIT,
   SNOWBALL_DAMPING,
   MODE_MODIFIERS,
-} from '../../../shared/constants';
+} from '@shared/constants';
 
 export class EconomySystem {
   constructor(private state: WorldState) {}

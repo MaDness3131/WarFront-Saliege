@@ -18,8 +18,8 @@ import { TerritorySystem } from './TerritorySystem';
 import { InputManager } from './InputManager';
 import { ExplosionSystem } from '../vfx/ExplosionSystem';
 import { socket } from '../network/SocketClient';
-import { ServerEvent } from '../../../shared/types';
-import { CELL_SIZE } from '../../../shared/constants';
+import { ServerEvent } from '@shared/types';
+import { CELL_SIZE } from '@shared/constants';
 
 export interface CameraState {
   x: number;

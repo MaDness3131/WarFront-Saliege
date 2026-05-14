@@ -9,7 +9,7 @@
 
 import { Graphics } from 'pixi.js';
 import { WorldMap } from './WorldMap';
-import { CELL_SIZE } from '../../../shared/constants';
+import { CELL_SIZE } from '@shared/constants';
 
 interface Pulse {
   gfx: Graphics;

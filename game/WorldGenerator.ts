@@ -13,12 +13,12 @@
 
 import { ArraySchema } from '@colyseus/schema';
 import { TerritorySchema } from './schema';
-import { TerrainType } from '../../../shared/types';
+import { TerrainType } from '@shared/types';
 import {
   OCEAN_THRESHOLD,
   MOUNTAIN_THRESHOLD,
   NEUTRAL_TERRITORY_TROOPS,
-} from '../../../shared/constants';
+} from '@shared/constants';
 
 /** PRNG déterministe (mulberry32) pour des cartes reproductibles. */
 function mulberry32(seed: number) {

@@ -16,7 +16,7 @@ import {
   BuildingType,
   TerritoryId,
   PlayerId,
-} from '../../../shared/types';
+} from '@shared/types';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'ws://localhost:2567';
 
