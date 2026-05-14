@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Warfront Saliège — Aperçu jouable</title>
+<style>
+  /* Démo autonome — reprend la direction artistique du vrai client.
+     ⚠️ Tout est simulé en local : ce n'est PAS la vraie architecture
+     client/serveur, c'est un aperçu du gameplay et du feel. */
+  :root {
+    --bg-deep:#070b12; --bg-panel:rgba(14,20,30,.88); --bg-solid:#0e141e;
+    --border:rgba(120,150,180,.18); --border-strong:rgba(150,190,220,.4);
+    --text:#c9d6e2; --dim:#6b7c8e; --accent:#3dcee0; --good:#4caf50;
+    --bad:#e0533d; --warn:#e0c93d;
+    --font:'Rajdhani','Oswald','Segoe UI Semibold','Segoe UI',sans-serif;
+    --mono:'JetBrains Mono','Consolas',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-deep);
+    color:var(--text);font-family:var(--font);user-select:none;-webkit-font-smoothing:antialiased}
+  canvas{display:block;position:absolute;inset:0}
+  .overlay{position:absolute;inset:0;pointer-events:none}
+  .overlay>*{pointer-events:auto}
+  .panel{position:absolute;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:4px;backdrop-filter:blur(6px);box-shadow:0 8px 32px rgba(0,0,0,.45)}
+
+  /* ressources */
+  #res{top:14px;left:14px;padding:12px 16px;display:flex;flex-direction:column;
+    gap:7px;min-width:210px}
+  .nation{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;
+    letter-spacing:1px;padding:0 0 8px 8px;margin-left:-8px;border-bottom:1px solid var(--border);
+    border-left:3px solid var(--accent)}
+  .nation i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block}
+  .stat{display:flex;justify-content:space-between;align-items:baseline}
+  .stat b{font-size:11px;letter-spacing:1.5px;color:var(--dim);font-weight:400}
+  .stat span{font-family:var(--mono);font-size:16px;font-weight:600}
+  .stat span small{font-size:11px;color:var(--dim)}
+
+  /* domination */
+  #dom{top:14px;left:50%;transform:translateX(-50%);padding:10px 18px;
+    text-align:center;min-width:260px}
+  #dom .lbl{font-size:10px;letter-spacing:2px;color:var(--dim)}
+  #dom .bar{height:7px;margin:6px 0 4px;background:var(--bg-solid);border-radius:4px;overflow:hidden}
+  #dom .fill{height:100%;background:var(--accent);transition:width .3s}
+  #dom .pct{font-family:var(--mono);font-size:14px;font-weight:600}
+
+  /* classement */
+  #lead{top:14px;right:14px;padding:10px 12px;width:230px}
+  #lead .t{font-size:10px;letter-spacing:2px;color:var(--dim);margin-bottom:6px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{font-size:9px;letter-spacing:1px;color:var(--dim);text-align:left;padding:2px 4px;font-weight:500}
+  td{padding:3px 4px;font-family:var(--mono)}
+  tr.me{color:var(--accent)} tr.dead{color:var(--dim);text-decoration:line-through}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+
+  /* ratio */
+  #ratio{bottom:14px;left:50%;transform:translateX(-50%);padding:10px 18px;
+    text-align:center;width:300px}
+  #ratio label{font-size:11px;letter-spacing:1px;color:var(--dim)}
+  #ratio input{width:100%;margin:8px 0 2px;accent-color:var(--accent)}
+  #ratio .hint{font-size:10px;color:var(--dim)}
+
+  /* notifs */
+  #notifs{position:absolute;bottom:96px;left:14px;display:flex;flex-direction:column;
+    gap:5px;width:250px}
+  .notif{padding:7px 10px;background:var(--bg-panel);border-left:3px solid var(--dim);
+    border-radius:2px;font-size:12px;animation:nin .2s ease}
+  .notif.good{border-left-color:var(--good)} .notif.bad{border-left-color:var(--bad)}
+  .notif.info{border-left-color:var(--accent)}
+  @keyframes nin{from{opacity:0;transform:translateX(-12px)}}
+
+  /* aide */
+  #help{bottom:14px;left:14px;padding:8px 12px;font-size:11px;color:var(--dim);
+    display:flex;gap:14px}
+  #help b{color:var(--text);font-weight:600}
+
+  /* bannière preview */
+  #flag{top:64px;left:50%;transform:translateX(-50%);padding:5px 14px;font-size:10px;
+    letter-spacing:1.5px;color:var(--warn);border-color:var(--warn)}
+
+  /* start / end */
+  .modal{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(7,11,18,.86);backdrop-filter:blur(5px)}
+  .card{text-align:center;padding:40px 56px;background:var(--bg-panel);
+    border:1px solid var(--border-strong);border-radius:6px;max-width:440px}
+  .card h1{font-size:36px;letter-spacing:5px;line-height:1}
+  .card h1 span{color:var(--accent)}
+  .card h2{font-size:30px;letter-spacing:4px;color:var(--accent);margin-bottom:6px}
+  .card p{margin:10px 0 22px;color:var(--dim);font-size:13px;line-height:1.5}
+  .card button{padding:12px 30px;background:var(--accent);color:var(--bg-deep);border:none;
+    font-family:var(--font);font-weight:700;letter-spacing:2px;font-size:14px;cursor:pointer;
+    border-radius:3px;transition:filter .15s}
+  .card button:hover{filter:brightness(1.15)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="overlay" id="hud">
+  <div class="panel" id="res">
+    <div class="nation"><i id="nDot"></i><span id="nName">Ta nation</span></div>
+    <div class="stat"><b>OR</b><span id="sGold">0 <small id="sInc"></small></span></div>
+    <div class="stat"><b>ARMÉE</b><span id="sArmy">0</span></div>
+    <div class="stat"><b>POPULATION</b><span id="sPop">0</span></div>
+    <div class="stat"><b>TERRITOIRES</b><span id="sTerr">0</span></div>
+  </div>
+
+  <div class="panel" id="dom">
+    <div class="lbl">DOMINATION MONDIALE</div>
+    <div class="bar"><div class="fill" id="domFill"></div></div>
+    <div class="pct" id="domPct">0.0%</div>
+  </div>
+
+  <div class="panel" id="lead">
+    <div class="t">CLASSEMENT</div>
+    <table><thead><tr><th>#</th><th>Nation</th><th>Terr.</th><th>Armée</th></tr></thead>
+    <tbody id="leadBody"></tbody></table>
+  </div>
+
+  <div class="panel" id="ratio">
+    <label>RATIO D'ATTAQUE — <span id="ratioVal">50</span>%</label>
+    <input type="range" id="ratioInput" min="5" max="100" value="50" />
+    <div class="hint">part de l'armée engagée à chaque clic</div>
+  </div>
+
+  <div id="notifs"></div>
+
+  <div class="panel" id="help">
+    <span><b>WASD</b> caméra</span><span><b>molette</b> zoom</span>
+    <span><b>clic</b> conquérir</span><span><b>glisser</b> déplacer</span>
+  </div>
+
+  <div class="panel" id="flag">APERÇU JOUABLE — GAMEPLAY SIMULÉ EN LOCAL</div>
+</div>
+
+<div class="modal" id="startModal">
+  <div class="card">
+    <h1>WARFRONT <span>SALIÈGE</span></h1>
+    <p>Conquête territoriale mondiale en temps réel.<br>
+       Clique les territoires adjacents aux tiens pour lancer des vagues de
+       conquête. Domine 70 % de la carte pour gagner.</p>
+    <button id="startBtn">ENTRER EN GUERRE</button>
+  </div>
+</div>
+
+<div class="modal hidden" id="endModal">
+  <div class="card">
+    <h2 id="endTitle">PARTIE TERMINÉE</h2>
+    <p id="endText"></p>
+    <button id="restartBtn">NOUVELLE PARTIE</button>
+  </div>
+</div>
+
+<script>
+// =============================================================================
+// Warfront Saliège — aperçu jouable autonome
+// Reproduit la boucle de jeu cœur (conquête / économie / population / armée /
+// bots / victoire) en un seul fichier. Le vrai jeu sépare client de rendu et
+// serveur autoritaire ; ici tout est simulé en local pour donner le feel.
+// =============================================================================
+
+// ---- Constantes (alignées sur shared/constants.ts) --------------------------
+const CELL = 16;
+const MAP_W = 78, MAP_H = 46;
+const TICK_HZ = 10;
+const ARMY_SPEED = 0.05;          // progression d'une vague par tick
+const GOLD_PER_TERR = 0.06;
+const POP_GROWTH = 0.02;
+const POP_TO_ARMY = 0.35;
+const POP_CAP_BASE = 80, POP_CAP_PER_TERR = 12;
+const NEUTRAL_TROOPS = 8;
+const MOUNTAIN_DEF = 1.6;
+const GARRISON_AFTER = 0.25;
+const MIN_FORCE = 2;
+const WIN_RATIO = 0.7;
+const COLORS = ['#e0533d','#3d8be0','#4caf50','#e0c93d','#9b59b6','#e07b3d','#1abc9c','#e03d8b'];
+const OCEAN = '#0a1a2a', NEUTRAL = '#2b3340';
+
+// terrains
+const T_OCEAN = 0, T_LAND = 1, T_MOUNTAIN = 2;
+
+// ---- État global ------------------------------------------------------------
+let cells = [];          // {x,y,terrain,owner,troops,capturedAt,neighbors[]}
+let players = [];        // {id,name,color,isBot,gold,army,pop,popCap,terr,alive,score,ratio,aggression,cd}
+let armies = [];         // {owner,from,to,progress,amount}
+let pulses = [];         // {x,y,age}
+let landCount = 0;
+let running = false;
+let me = null;
+let cam = { x:0, y:0, zoom:1 };
+let notifs = [];
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resize); resize();
+
+// ---- Génération de carte (bruit de valeur lissé) ----------------------------
+function rand(seed){ let s=seed>>>0; return ()=>{ s=(s+0x6d2b79f5)|0;
+  let t=Math.imul(s^(s>>>15),1|s); t=(t+Math.imul(t^(t>>>7),61|t))^t;
+  return ((t^(t>>>14))>>>0)/4294967296; }; }
+
+function valueNoise(w,h,rng,scale){
+  const gw=Math.ceil(w/scale)+2, gh=Math.ceil(h/scale)+2, g=[];
+  for(let i=0;i<gw*gh;i++) g.push(rng());
+  const out=new Array(w*h), sm=t=>t*t*(3-2*t);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const gx=x/scale,gy=y/scale,x0=(gx|0),y0=(gy|0),fx=gx-x0,fy=gy-y0;
+    const a=g[y0*gw+x0],b=g[y0*gw+x0+1],c=g[(y0+1)*gw+x0],d=g[(y0+1)*gw+x0+1];
+    const top=a+(b-a)*sm(fx),bot=c+(d-c)*sm(fx);
+    out[y*w+x]=top+(bot-top)*sm(fy);
+  }
+  return out;
+}
+
+function generateMap(){
+  cells = []; landCount = 0;
+  const seed = (Math.random()*1e9)|0;
+  const rng = rand(seed);
+  const base = valueNoise(MAP_W,MAP_H,rng,13);
+  const detail = valueNoise(MAP_W,MAP_H,rng,5);
+  for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){
+    const i=y*MAP_W+x;
+    const n=base[i]*0.65+detail[i]*0.35;
+    const edge=Math.min(x,MAP_W-1-x,y,MAP_H-1-y)/Math.min(MAP_W,MAP_H);
+    const elev=n*Math.min(1,edge*3.4);
+    let terrain=T_OCEAN, troops=0;
+    if(elev>=0.42 && elev<=0.78){ terrain=T_LAND; troops=NEUTRAL_TROOPS; landCount++; }
+    else if(elev>0.78){ terrain=T_MOUNTAIN; troops=NEUTRAL_TROOPS; landCount++; }
+    cells.push({x,y,terrain,owner:null,troops,capturedAt:0,neighbors:[]});
+  }
+  // voisinage 4-connexité
+  for(let y=0;y<MAP_H;y++)for(let x=0;x<MAP_W;x++){
+    const c=cells[y*MAP_W+x];
+    if(x>0)c.neighbors.push(y*MAP_W+x-1);
+    if(x<MAP_W-1)c.neighbors.push(y*MAP_W+x+1);
+    if(y>0)c.neighbors.push((y-1)*MAP_W+x);
+    if(y<MAP_H-1)c.neighbors.push((y+1)*MAP_W+x);
+  }
+}
+
+// ---- Joueurs ----------------------------------------------------------------
+function spawnPlayers(){
+  players = []; armies = []; pulses = [];
+  const names = ['Toi','Bot Helvar','Bot Norrköl','Bot Saliège-Est','Bot Karthag','Bot Veldt'];
+  for(let p=0;p<names.length;p++){
+    const pl = {
+      id:'p'+p, name:names[p], color:COLORS[p], isBot:p>0,
+      gold:100, army:30, pop:50, popCap:POP_CAP_BASE, terr:0,
+      alive:true, score:0, ratio:0.5,
+      aggression:0.35+Math.random()*0.55, cd:Math.random()*15
+    };
+    players.push(pl);
+    // spawn isolé : on tente plusieurs cases, on garde la plus éloignée
+    let best=null, bestDist=-1;
+    for(let tries=0;tries<60;tries++){
+      const c=cells[(Math.random()*cells.length)|0];
+      if(c.terrain===T_OCEAN||c.owner) continue;
+      let md=1e9;
+      for(const o of cells){ if(o.owner){ const d=Math.abs(o.x-c.x)+Math.abs(o.y-c.y); if(d<md)md=d; } }
+      if(md>bestDist){ bestDist=md; best=c; }
+    }
+    if(best){ best.owner=pl.id; best.troops=12; best.capturedAt=performance.now(); pl.terr=1; }
+  }
+  me = players[0];
+  // centre caméra sur le spawn du joueur
+  const mine = cells.find(c=>c.owner===me.id);
+  if(mine){ cam.x = mine.x*CELL - innerWidth/2; cam.y = mine.y*CELL - innerHeight/2; }
+}
+
+// ---- Logique de jeu (= ce que ferait le serveur autoritaire) ----------------
+function effectiveDefense(c){
+  let bonus = c.terrain===T_MOUNTAIN ? MOUNTAIN_DEF : 1;
+  return c.troops * bonus;
+}
+
+function requestAttack(playerId, targetIdx){
+  const pl = players.find(p=>p.id===playerId);
+  const target = cells[targetIdx];
+  if(!pl||!pl.alive||!target||target.terrain===T_OCEAN) return 'invalid';
+  // trouver une case frontalière possédée
+  let source=-1;
+  for(const nid of target.neighbors){
+    if(cells[nid].owner===playerId && cells[nid].terrain!==T_OCEAN){ source=nid; break; }
+  }
+  if(source<0) return 'not_adjacent';
+  const force = pl.army * pl.ratio;
+  if(force < MIN_FORCE) return 'no_army';
+  pl.army -= force;
+  armies.push({ owner:playerId, from:source, to:targetIdx, progress:0, amount:force,
+    reinforcement: target.owner===playerId });
+  return 'ok';
+}
+
+function resolveArrival(a){
+  const target = cells[a.to];
+  if(!target||target.terrain===T_OCEAN) return;
+  const pl = players.find(p=>p.id===a.owner);
+  if(!pl||!pl.alive) return;
+  if(target.owner===a.owner){ target.troops += a.amount; return; }
+  const def = effectiveDefense(target);
+  if(a.amount > def){
+    const prev = players.find(p=>p.id===target.owner);
+    if(prev) prev.terr = Math.max(0,prev.terr-1);
+    target.owner = a.owner;
+    target.troops = Math.max(1,(a.amount-def)*GARRISON_AFTER+1);
+    target.capturedAt = performance.now();
+    pl.terr++;
+    pulses.push({x:target.x,y:target.y,age:0});
+    if(a.owner===me.id) notify('Territoire capturé','good');
+    else if(prev && prev.id===me.id) notify('Territoire perdu','bad');
+  } else {
+    target.troops = Math.max(0, target.troops - a.amount/Math.max(1,def/Math.max(1,target.troops)));
+  }
+}
+
+function botThink(pl,dt){
+  pl.cd -= dt;
+  if(pl.cd>0) return;
+  pl.cd = (2.4 - pl.aggression*1.8) * TICK_HZ;
+  // attaque la case frontalière la plus faible
+  let best=-1, bestDef=1e9;
+  const seen=new Set();
+  for(let i=0;i<cells.length;i++){
+    if(cells[i].owner!==pl.id) continue;
+    for(const nid of cells[i].neighbors){
+      if(seen.has(nid)) continue; seen.add(nid);
+      const n=cells[nid];
+      if(n.terrain===T_OCEAN||n.owner===pl.id) continue;
+      const d=effectiveDefense(n);
+      if(d<bestDef){ bestDef=d; best=nid; }
+    }
+  }
+  if(best>=0) requestAttack(pl.id,best);
+}
+
+let tickAccum = 0;
+function simulate(dtMs){
+  tickAccum += dtMs;
+  const step = 1000/TICK_HZ;
+  while(tickAccum >= step){
+    tickAccum -= step;
+    doTick();
+  }
+}
+
+function doTick(){
+  // 1. économie + population
+  for(const pl of players){
+    if(!pl.alive) continue;
+    const damp = Math.max(0.35, 1 - pl.terr*0.0025);
+    pl.gold = Math.max(0, pl.gold + pl.terr*GOLD_PER_TERR*damp - pl.army*0.0008);
+    pl.popCap = POP_CAP_BASE + pl.terr*POP_CAP_PER_TERR;
+    const cap = Math.max(1,pl.popCap);
+    const growth = POP_GROWTH * pl.pop * (1 - pl.pop/cap);
+    const np = Math.max(0,Math.min(cap, pl.pop+growth));
+    if(np>pl.pop) pl.army += (np-pl.pop)*POP_TO_ARMY;
+    pl.pop = np;
+  }
+  // 2. vagues
+  for(let i=armies.length-1;i>=0;i--){
+    armies[i].progress += ARMY_SPEED;
+    if(armies[i].progress>=1){ resolveArrival(armies[i]); armies.splice(i,1); }
+  }
+  // 3. bots
+  for(const pl of players){ if(pl.isBot && pl.alive) botThink(pl,1); }
+  // 4. éliminations + score
+  for(const pl of players){
+    if(pl.alive && pl.terr===0 && performance.now()>5000){
+      pl.alive=false; pl.army=0;
+      if(pl.id===me.id) notify('Tu as été éliminé','bad');
+    }
+    pl.score = pl.terr + pl.army/10 + pl.gold/20;
+  }
+  // 5. victoire
+  for(const pl of players){
+    if(pl.alive && pl.terr/landCount >= WIN_RATIO){ endGame(pl); return; }
+  }
+  const alive = players.filter(p=>p.alive);
+  if(alive.length===1){ endGame(alive[0]); }
+}
+
+// ---- Rendu ------------------------------------------------------------------
+function colorOf(c){
+  if(c.terrain===T_OCEAN) return OCEAN;
+  if(c.owner){ const pl=players.find(p=>p.id===c.owner); return pl?pl.color:NEUTRAL; }
+  return NEUTRAL;
+}
+
+function render(){
+  ctx.fillStyle = '#070b12';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.save();
+  ctx.translate(-cam.x*cam.zoom, -cam.y*cam.zoom);
+  ctx.scale(cam.zoom,cam.zoom);
+
+  // bornes visibles (culling)
+  const vx0=cam.x, vy0=cam.y;
+  const vx1=cam.x+canvas.width/cam.zoom, vy1=cam.y+canvas.height/cam.zoom;
+  const c0=Math.max(0,(vx0/CELL)|0), c1=Math.min(MAP_W,(vx1/CELL|0)+1);
+  const r0=Math.max(0,(vy0/CELL)|0), r1=Math.min(MAP_H,(vy1/CELL|0)+1);
+
+  // cellules
+  for(let y=r0;y<r1;y++)for(let x=c0;x<c1;x++){
+    const c=cells[y*MAP_W+x];
+    ctx.fillStyle = colorOf(c);
+    ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+    if(c.terrain===T_MOUNTAIN){
+      ctx.fillStyle='rgba(74,74,82,.4)';
+      ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+    }
+  }
+
+  // frontières (arêtes droite/bas entre propriétaires différents)
+  ctx.strokeStyle='#0a0e14'; ctx.lineWidth=1.5; ctx.beginPath();
+  for(let y=r0;y<r1;y++)for(let x=c0;x<c1;x++){
+    const c=cells[y*MAP_W+x];
+    if(c.terrain===T_OCEAN||!c.owner) continue;
+    const px=x*CELL,py=y*CELL;
+    if(x+1<MAP_W){ const rr=cells[y*MAP_W+x+1]; if(!rr||rr.owner!==c.owner){
+      ctx.moveTo(px+CELL,py); ctx.lineTo(px+CELL,py+CELL); } }
+    if(y+1<MAP_H){ const bb=cells[(y+1)*MAP_W+x]; if(!bb||bb.owner!==c.owner){
+      ctx.moveTo(px,py+CELL); ctx.lineTo(px+CELL,py+CELL); } }
+  }
+  ctx.stroke();
+
+  // pulsations de capture
+  for(const p of pulses){
+    const t=p.age/550;
+    if(t>=1) continue;
+    ctx.strokeStyle=`rgba(255,255,255,${(1-t)*0.7})`;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc((p.x+0.5)*CELL,(p.y+0.5)*CELL,CELL*(0.4+t*2.4),0,Math.PI*2);
+    ctx.stroke();
+  }
+
+  // vagues d'armées
+  for(const a of armies){
+    const f=cells[a.from], t=cells[a.to];
+    const fx=(f.x+0.5)*CELL, fy=(f.y+0.5)*CELL;
+    const tx=(t.x+0.5)*CELL, ty=(t.y+0.5)*CELL;
+    const x=fx+(tx-fx)*a.progress, y=fy+(ty-fy)*a.progress;
+    const pl=players.find(p=>p.id===a.owner);
+    const rad=Math.min(6,2+Math.log2(a.amount+1));
+    ctx.fillStyle=pl?pl.color:'#fff';
+    ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.6)'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ---- HUD --------------------------------------------------------------------
+function notify(text,tone){
+  const n={text,tone,id:Math.random()};
+  notifs.push(n);
+  if(notifs.length>5) notifs.shift();
+  renderNotifs();
+  setTimeout(()=>{ notifs=notifs.filter(x=>x.id!==n.id); renderNotifs(); },4000);
+}
+function renderNotifs(){
+  document.getElementById('notifs').innerHTML =
+    notifs.map(n=>`<div class="notif ${n.tone}">${n.text}</div>`).join('');
+}
+
+function updateHUD(){
+  if(!me) return;
+  document.getElementById('nDot').style.background = me.color;
+  document.getElementById('nName').textContent = me.name;
+  const inc = (me.terr*GOLD_PER_TERR*Math.max(0.35,1-me.terr*0.0025) - me.army*0.0008)*TICK_HZ;
+  document.getElementById('sGold').innerHTML =
+    Math.floor(me.gold).toLocaleString('fr-FR') +
+    ` <small>${inc>=0?'+':''}${inc.toFixed(1)}/s</small>`;
+  document.getElementById('sArmy').textContent = Math.floor(me.army).toLocaleString('fr-FR');
+  document.getElementById('sPop').textContent =
+    Math.floor(me.pop) + ' / ' + Math.floor(me.popCap);
+  document.getElementById('sTerr').textContent = me.terr;
+
+  const pct = landCount>0 ? me.terr/landCount*100 : 0;
+  document.getElementById('domFill').style.width = pct+'%';
+  document.getElementById('domFill').style.background = me.color;
+  document.getElementById('domPct').textContent = pct.toFixed(1)+'%';
+
+  const sorted = [...players].sort((a,b)=>b.score-a.score);
+  document.getElementById('leadBody').innerHTML = sorted.map((p,i)=>
+    `<tr class="${p.id===me.id?'me':(p.alive?'':'dead')}">
+      <td>${i+1}</td>
+      <td><span class="dot" style="background:${p.color}"></span>${p.name}</td>
+      <td>${p.terr}</td><td>${Math.floor(p.army)}</td></tr>`).join('');
+}
+
+// ---- Boucle principale ------------------------------------------------------
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(100, now-last); last = now;
+  if(running){
+    simulate(dt);
+    for(const p of pulses) p.age += dt;
+    pulses = pulses.filter(p=>p.age<550);
+    handleCameraKeys(dt);
+  }
+  render();
+  if(running) updateHUD();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---- Entrées ----------------------------------------------------------------
+const keys = new Set();
+addEventListener('keydown',e=>keys.add(e.key.toLowerCase()));
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+
+function handleCameraKeys(dt){
+  let dx=0,dy=0;
+  if(keys.has('w')||keys.has('arrowup'))dy--;
+  if(keys.has('s')||keys.has('arrowdown'))dy++;
+  if(keys.has('a')||keys.has('arrowleft'))dx--;
+  if(keys.has('d')||keys.has('arrowright'))dx++;
+  if(dx||dy){
+    const len=Math.hypot(dx,dy)||1, sp=0.6*dt/cam.zoom;
+    cam.x+=dx/len*sp; cam.y+=dy/len*sp; clampCam();
+  }
+}
+function clampCam(){
+  const vw=canvas.width/cam.zoom, vh=canvas.height/cam.zoom;
+  cam.x=Math.min(Math.max(0,cam.x),Math.max(0,MAP_W*CELL-vw));
+  cam.y=Math.min(Math.max(0,cam.y),Math.max(0,MAP_H*CELL-vh));
+}
+
+let dragging=false, dragMoved=0, lastPtr={x:0,y:0};
+canvas.addEventListener('pointerdown',e=>{ dragging=true; dragMoved=0; lastPtr={x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  const dx=e.clientX-lastPtr.x, dy=e.clientY-lastPtr.y;
+  dragMoved+=Math.abs(dx)+Math.abs(dy);
+  cam.x-=dx/cam.zoom; cam.y-=dy/cam.zoom; clampCam();
+  lastPtr={x:e.clientX,y:e.clientY};
+});
+addEventListener('pointerup',e=>{
+  if(!dragging) return; dragging=false;
+  if(dragMoved<5 && running){
+    const wx=e.clientX/cam.zoom+cam.x, wy=e.clientY/cam.zoom+cam.y;
+    const col=(wx/CELL)|0, row=(wy/CELL)|0;
+    if(col>=0&&row>=0&&col<MAP_W&&row<MAP_H){
+      const res=requestAttack(me.id,row*MAP_W+col);
+      if(res==='not_adjacent') notify('Cible non adjacente à ton territoire','bad');
+      else if(res==='no_army') notify('Armée insuffisante pour attaquer','bad');
+    }
+  }
+});
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f = e.deltaY<0 ? 1.12 : 1/1.12;
+  const nz = Math.min(4,Math.max(0.3,cam.zoom*f));
+  if(nz===cam.zoom) return;
+  const wx=e.clientX/cam.zoom+cam.x, wy=e.clientY/cam.zoom+cam.y;
+  cam.zoom=nz;
+  cam.x=wx-e.clientX/nz; cam.y=wy-e.clientY/nz;
+  clampCam();
+},{passive:false});
+
+document.getElementById('ratioInput').addEventListener('input',e=>{
+  me.ratio = e.target.value/100;
+  document.getElementById('ratioVal').textContent = e.target.value;
+});
+
+// ---- Démarrage / fin --------------------------------------------------------
+function startGame(){
+  generateMap();
+  spawnPlayers();
+  tickAccum = 0;
+  running = true;
+  document.getElementById('startModal').classList.add('hidden');
+  document.getElementById('endModal').classList.add('hidden');
+  notify('La guerre commence — étends ton empire','info');
+}
+function endGame(winner){
+  running = false;
+  const won = winner.id===me.id;
+  document.getElementById('endTitle').textContent = won ? 'VICTOIRE' : 'DÉFAITE';
+  document.getElementById('endText').innerHTML = won
+    ? 'Tu domines le monde. Warfront Saliège t\'appartient.'
+    : `Vainqueur : <b style="color:${winner.color}">${winner.name}</b>.<br>L\'histoire retiendra une autre nation.`;
+  document.getElementById('endModal').classList.remove('hidden');
+}
+document.getElementById('startBtn').addEventListener('click',startGame);
+document.getElementById('restartBtn').addEventListener('click',startGame);
+</script>
+</body>
+</html>
