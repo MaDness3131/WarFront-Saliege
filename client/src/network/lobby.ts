@@ -410,18 +410,30 @@ export async function joinLobby(
   const hostPeerId = ID_PREFIX + normalized;
   const conn = peer.connect(hostPeerId, { reliable: true });
 
-  // Attend l'ouverture de la DataChannel (10 s timeout).
+  // Attend l'ouverture de la DataChannel (20 s timeout — laisse le temps
+  // d'établir la connexion WebRTC même sur des réseaux capricieux).
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Pas de réponse du salon — code invalide ou host hors ligne.')), 10_000);
-    conn.on('open', () => { clearTimeout(timeout); resolve(); });
-    conn.on('error', (err) => { clearTimeout(timeout); reject(err); });
-    peer.on('error', (err) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Pas de réponse du salon en 20 s — code invalide, host hors ligne, ou pare-feu trop strict.')),
+      20_000,
+    );
+    conn.on('open', () => {
       clearTimeout(timeout);
-      if (err.type === 'peer-unavailable') {
-        reject(new Error('Salon introuvable — vérifie le code.'));
-      } else {
-        reject(err);
-      }
+      // eslint-disable-next-line no-console
+      console.info('[Lobby] DataChannel ouverte avec host');
+      resolve();
+    });
+    conn.on('error', (err: any) => {
+      clearTimeout(timeout);
+      // eslint-disable-next-line no-console
+      console.error('[Lobby] DataChannel error:', err);
+      reject(translatePeerError(err));
+    });
+    peer.on('error', (err: any) => {
+      clearTimeout(timeout);
+      // eslint-disable-next-line no-console
+      console.error('[Lobby] Peer error pendant join:', err?.type, err?.message);
+      reject(translatePeerError(err));
     });
   });
 
@@ -429,15 +441,92 @@ export async function joinLobby(
 }
 
 /** Ouvre un Peer avec ID donné (ou random si omis). Promise résolue
- *  quand le peer est prêt côté broker. */
+ *  quand le peer est prêt côté broker.
+ *
+ *  Config explicite :
+ *   - Broker PeerJS public en HTTPS (obligatoire car le site est servi
+ *     en HTTPS sur Vercel — un mix HTTP/HTTPS serait bloqué par le navigateur).
+ *   - STUN : serveurs Google + Twilio (NAT discovery — gratuit, illimité).
+ *   - TURN : Open Relay Project de metered.ca (free, ~5 Gb/mois).
+ *     Indispensable pour les NATs symétriques (mobile data, certains
+ *     WiFi corporate) — sans ça ~10-15 % des connexions échouent.
+ */
 function openPeer(id?: string): Promise<Peer> {
   return new Promise((resolve, reject) => {
-    const peer = id ? new Peer(id) : new Peer();
+    const options: any = {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
+      path: '/',
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          // Open Relay free TURN (metered.ca)
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject',
+          },
+        ],
+      },
+      debug: 1, // 0=none, 1=errors, 2=warnings, 3=verbose
+    };
+    const peer = id ? new Peer(id, options) : new Peer(options);
     const timeout = setTimeout(() => {
       try { peer.destroy(); } catch { /* noop */ }
-      reject(new Error('Broker PeerJS injoignable — réseau ?'));
-    }, 10_000);
-    peer.on('open', () => { clearTimeout(timeout); resolve(peer); });
-    peer.on('error', (err) => { clearTimeout(timeout); reject(err); });
+      reject(new Error('Broker PeerJS injoignable (timeout 15 s). Vérifie ta connexion internet.'));
+    }, 15_000);
+    peer.on('open', () => {
+      clearTimeout(timeout);
+      // eslint-disable-next-line no-console
+      console.info('[Lobby] Peer ouvert:', peer.id);
+      resolve(peer);
+    });
+    peer.on('error', (err: any) => {
+      clearTimeout(timeout);
+      // eslint-disable-next-line no-console
+      console.error('[Lobby] Peer error:', err?.type, err?.message);
+      reject(translatePeerError(err));
+    });
   });
+}
+
+/** Convertit une erreur PeerJS en message clair pour l'utilisateur. */
+function translatePeerError(err: any): Error {
+  const type = err?.type || '';
+  switch (type) {
+    case 'peer-unavailable':
+      return new Error('Salon introuvable — vérifie le code (le host doit être en ligne).');
+    case 'unavailable-id':
+      return new Error('Code déjà pris — réessaye, un nouveau code sera généré.');
+    case 'network':
+      return new Error('Connexion au broker perdue — vérifie ta connexion.');
+    case 'server-error':
+      return new Error('Le broker PeerJS a un souci — réessaye dans 1 minute.');
+    case 'socket-error':
+    case 'socket-closed':
+      return new Error('Connexion WebSocket fermée — réessaye.');
+    case 'webrtc':
+      return new Error('Connexion P2P impossible — NAT/firewall bloque le navigateur.');
+    case 'browser-incompatible':
+      return new Error('Ton navigateur ne supporte pas WebRTC — essaye Chrome/Firefox récent.');
+    case 'ssl-unavailable':
+      return new Error('Connexion HTTPS requise pour PeerJS.');
+    case 'disconnected':
+      return new Error('Déconnecté du broker.');
+    default:
+      return new Error(`Erreur réseau (${type || 'inconnue'}) : ${err?.message || 'voir console'}`);
+  }
 }

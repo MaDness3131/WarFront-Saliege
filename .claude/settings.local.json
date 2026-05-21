@@ -65,7 +65,16 @@
       "Bash(brew --prefix)",
       "Bash(git reset *)",
       "Bash(git rm *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(brew install *)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(pkill -f \"gh auth login\")",
+      "Bash(gh repo *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)"
     ]
   }
 }
