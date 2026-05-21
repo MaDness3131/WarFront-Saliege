@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Builds
+dist/
+*/dist/
+build/
+*/build/
+
+# Vercel
+.vercel/
+*/.vercel/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*/.env
+*/.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Cache
+.cache/
+.parcel-cache/
+.turbo/
+
+# Generated maps (optional - decomment if size becomes an issue)
+# *.map

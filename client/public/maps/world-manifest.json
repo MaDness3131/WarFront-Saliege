@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "source": "client/public/maps/world-pixel.webp",
+  "width": 1100,
+  "height": 620,
+  "land_tiles": 207348,
+  "coast_tiles": 10409,
+  "shore_tiles": 10491,
+  "biome_legend": {
+    "0": "Ocean",
+    "1": "OceanShore",
+    "2": "Coast",
+    "3": "Plains",
+    "4": "Forest",
+    "5": "Desert",
+    "6": "Snow",
+    "7": "Mountain"
+  },
+  "byte_format": "3 bits biome (5-7) + 5 bits magnitude (0-4)",
+  "lod": {
+    "full": {
+      "file": "world.bin",
+      "width": 1100,
+      "height": 620,
+      "bytes": 682000
+    },
+    "4x": {
+      "file": "world-4x.bin",
+      "width": 275,
+      "height": 155,
+      "bytes": 42625
+    },
+    "16x": {
+      "file": "world-16x.bin",
+      "width": 69,
+      "height": 39,
+      "bytes": 2691
+    }
+  }
+}
