@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createLobby,
   joinLobby,
+  getDiagnostics,
   LobbyStateView,
   StartPayload,
   LobbyRoom,
@@ -782,6 +783,40 @@ const GROUP_CSS = `
 }
 .group-error button:hover { background: rgba(241,196,15,0.15); }
 
+/* Panneau diagnostic — affiché en mode debug pour aider à résoudre les
+ * pannes WebRTC. L'utilisateur peut copier le contenu et le partager. */
+.group-diag {
+  margin-top: 14px;
+  border: 1px dashed rgba(241,196,15,0.4);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: rgba(0,0,0,0.5);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+}
+.group-diag summary {
+  cursor: pointer;
+  color: #f1c40f;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.group-diag pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 3px;
+  color: #d6e0d8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 `;
 
 function injectStyle() {
@@ -1167,7 +1202,31 @@ export function GroupScreen({ onBack, onStartMultiplayer }: Props) {
                 Retour
               </button>
             </div>
+            <details className="group-diag">
+              <summary>📋 Diagnostic technique (montre-le moi si ça plante)</summary>
+              <pre>
+                {getDiagnostics().map((e) => {
+                  const t = new Date(e.ts).toISOString().substring(11, 19);
+                  const tag = e.level === 'error' ? '✕' : e.level === 'warn' ? '!' : 'i';
+                  return `${t} ${tag} ${e.msg}\n`;
+                }).join('')}
+              </pre>
+            </details>
           </div>
+        )}
+
+        {/* ── Diagnostic permanent en bas de phase joining/creating ── */}
+        {(phase === 'creating' || phase === 'joining') && (
+          <details className="group-diag">
+            <summary>📋 Diagnostic technique</summary>
+            <pre>
+              {getDiagnostics().map((e) => {
+                const t = new Date(e.ts).toISOString().substring(11, 19);
+                const tag = e.level === 'error' ? '✕' : e.level === 'warn' ? '!' : 'i';
+                return `${t} ${tag} ${e.msg}\n`;
+              }).join('')}
+            </pre>
+          </details>
         )}
 
         <div className="group-footnote">★ Joue avec tes potes via code de salon ★</div>

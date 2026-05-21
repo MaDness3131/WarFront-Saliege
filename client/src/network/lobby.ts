@@ -406,33 +406,32 @@ export async function joinLobby(
   skinId: string,
 ): Promise<LobbyRoom> {
   const normalized = code.trim().toUpperCase();
+  logDiag('info', `Tentative de rejoindre le salon "${normalized}"`);
   const peer = await openPeer(); // ID random
   const hostPeerId = ID_PREFIX + normalized;
+  logDiag('info', `Connexion à host ID="${hostPeerId}"`);
   const conn = peer.connect(hostPeerId, { reliable: true });
 
-  // Attend l'ouverture de la DataChannel (20 s timeout — laisse le temps
+  // Attend l'ouverture de la DataChannel (25 s timeout — laisse le temps
   // d'établir la connexion WebRTC même sur des réseaux capricieux).
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error('Pas de réponse du salon en 20 s — code invalide, host hors ligne, ou pare-feu trop strict.')),
-      20_000,
-    );
+    const timeout = setTimeout(() => {
+      logDiag('error', 'Timeout 25s — DataChannel non établie');
+      reject(new Error('Pas de réponse du salon en 25 s. Causes possibles : code incorrect, host hors ligne, ou ton réseau bloque le WebRTC (NAT symétrique).'));
+    }, 25_000);
     conn.on('open', () => {
       clearTimeout(timeout);
-      // eslint-disable-next-line no-console
-      console.info('[Lobby] DataChannel ouverte avec host');
+      logDiag('info', 'DataChannel ouverte ✓ — connexion P2P établie');
       resolve();
     });
     conn.on('error', (err: any) => {
       clearTimeout(timeout);
-      // eslint-disable-next-line no-console
-      console.error('[Lobby] DataChannel error:', err);
+      logDiag('error', `DataChannel error: ${err?.type || ''} ${err?.message || ''}`);
       reject(translatePeerError(err));
     });
     peer.on('error', (err: any) => {
       clearTimeout(timeout);
-      // eslint-disable-next-line no-console
-      console.error('[Lobby] Peer error pendant join:', err?.type, err?.message);
+      logDiag('error', `Peer error pendant join: type="${err?.type || '?'}" msg="${err?.message || '?'}"`);
       reject(translatePeerError(err));
     });
   });
@@ -440,16 +439,33 @@ export async function joinLobby(
   return new GuestRoom(normalized, peer, conn, name, skinId);
 }
 
+/**
+ * Diag log — buffer d'événements PeerJS observés. Exposé via getDiagnostics()
+ * pour qu'on puisse l'afficher dans le panneau de debug du lobby UI.
+ */
+const diagLog: { ts: number; level: 'info' | 'warn' | 'error'; msg: string }[] = [];
+function logDiag(level: 'info' | 'warn' | 'error', msg: string) {
+  diagLog.push({ ts: Date.now(), level, msg });
+  // Garde 50 derniers events seulement.
+  if (diagLog.length > 50) diagLog.shift();
+  // eslint-disable-next-line no-console
+  console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info'](`[Lobby] ${msg}`);
+}
+export function getDiagnostics() {
+  return [...diagLog];
+}
+
 /** Ouvre un Peer avec ID donné (ou random si omis). Promise résolue
  *  quand le peer est prêt côté broker.
  *
- *  Config explicite :
- *   - Broker PeerJS public en HTTPS (obligatoire car le site est servi
- *     en HTTPS sur Vercel — un mix HTTP/HTTPS serait bloqué par le navigateur).
- *   - STUN : serveurs Google + Twilio (NAT discovery — gratuit, illimité).
- *   - TURN : Open Relay Project de metered.ca (free, ~5 Gb/mois).
- *     Indispensable pour les NATs symétriques (mobile data, certains
- *     WiFi corporate) — sans ça ~10-15 % des connexions échouent.
+ *  Config :
+ *   - Broker PeerJS public sur 0.peerjs.com:443 en HTTPS (obligatoire car
+ *     le site est servi en HTTPS sur Vercel).
+ *   - STUN : Google + Cloudflare (couvre 80-90 % des NATs).
+ *   - Pas de TURN ici : les serveurs free fiables ne courent pas les rues
+ *     (Open Relay Project a été déprécié en 2024). La majorité des
+ *     réseaux home + 4G modernes passent en STUN seulement. Si jamais un
+ *     ami a un NAT symétrique strict, on pourra ajouter un TURN payant.
  */
 function openPeer(id?: string): Promise<Peer> {
   return new Promise((resolve, reject) => {
@@ -462,42 +478,32 @@ function openPeer(id?: string): Promise<Peer> {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-          // Open Relay free TURN (metered.ca)
-          {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-          },
-          {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject',
-          },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
         ],
       },
-      debug: 1, // 0=none, 1=errors, 2=warnings, 3=verbose
+      debug: 2, // 0=none, 1=errors, 2=warnings, 3=verbose
     };
+    logDiag('info', id ? `Ouverture peer ID="${id}" sur broker 0.peerjs.com` : 'Ouverture peer ID aléatoire sur broker');
     const peer = id ? new Peer(id, options) : new Peer(options);
     const timeout = setTimeout(() => {
+      logDiag('error', 'Timeout 15s — broker PeerJS injoignable');
       try { peer.destroy(); } catch { /* noop */ }
       reject(new Error('Broker PeerJS injoignable (timeout 15 s). Vérifie ta connexion internet.'));
     }, 15_000);
-    peer.on('open', () => {
+    peer.on('open', (openedId) => {
       clearTimeout(timeout);
-      // eslint-disable-next-line no-console
-      console.info('[Lobby] Peer ouvert:', peer.id);
+      logDiag('info', `Peer prêt côté broker — ID="${openedId}"`);
       resolve(peer);
+    });
+    peer.on('disconnected', () => {
+      logDiag('warn', 'Déconnecté du broker (le peer essaie de se reconnecter)');
+      // Tentative de reconnexion auto.
+      try { peer.reconnect(); } catch { /* noop */ }
     });
     peer.on('error', (err: any) => {
       clearTimeout(timeout);
-      // eslint-disable-next-line no-console
-      console.error('[Lobby] Peer error:', err?.type, err?.message);
+      logDiag('error', `Peer error type="${err?.type || '?'}" msg="${err?.message || '?'}"`);
       reject(translatePeerError(err));
     });
   });
