@@ -44,7 +44,7 @@ export class GameEngine {
   /** Labels par région (composante connexe), clé = `${owner}:${rootTileId}`. */
   private regionLabels = new Map<string, { nameText: Text; troopText: Text }>();
   /** Cache des régions calculées, rafraîchi périodiquement. */
-  private cachedRegions: { owner: string; key: string; name: string; cx: number; cy: number; size: number }[] = [];
+  private cachedRegions: { owner: string; key: string; name: string; cx: number; cy: number; size: number; isPrimary: boolean }[] = [];
   private lastRegionsAt = 0;
   private shipLayer = new Container();
   private missileLayer = new Container();
@@ -62,6 +62,11 @@ export class GameEngine {
   private tilesSyncedOnce = false;
   private latestState: any = null;
   private shipSprites = new Map<string, Graphics>();
+  /** Marqueurs visuels sur les tuiles de débarquement (rendus uniquement
+   *  pour les bateaux QUI M'APPARTIENNENT et qui ont un landTargetId actif). */
+  private shipDestMarkers = new Map<string, Graphics>();
+  /** Phase pulsée du marqueur de débarquement (pour le rendu animé). */
+  private destMarkerPhase = 0;
   private missileSprites = new Map<string, Graphics>();
   /** Phase d'animation des vagues (0..1), avance chaque frame. */
   private wavePhase = 0;
@@ -344,14 +349,19 @@ export class GameEngine {
     if (now - this.lastRegionsAt > 6000 || this.cachedRegions.length === 0) {
       this.lastRegionsAt = now;
       const regions = computeRegions(state);
-      // Une seule étiquette par nation : on garde la PLUS GROSSE région.
+      // Détecte la PLUS GROSSE région par nation (label "primaire").
       const largestPerOwner = new Map<string, typeof regions[0]>();
       for (const r of regions) {
         const cur = largestPerOwner.get(r.owner);
         if (!cur || r.size > cur.size) largestPerOwner.set(r.owner, r);
       }
+      // On garde TOUTES les régions ≥ 6 tuiles. Les "primaires" affichent
+      // nation+armée totale ; les autres apparaissent quand on zoome
+      // (cf. filter is-zoomed dans render) avec nom local + armée prorata.
       this.cachedRegions = [];
-      for (const r of largestPerOwner.values()) {
+      for (const r of regions) {
+        if (r.size < 6) continue;
+        const primary = largestPerOwner.get(r.owner) === r;
         this.cachedRegions.push({
           owner: r.owner,
           key: `${r.owner}:${r.rootTileId}`,
@@ -359,6 +369,7 @@ export class GameEngine {
           cx: (r.cx + 0.5) * CELL_SIZE,
           cy: (r.cy + 0.5) * CELL_SIZE,
           size: r.size,
+          isPrimary: primary,
         });
       }
     }
@@ -375,21 +386,37 @@ export class GameEngine {
     const camBottom = camTop + vis.height / cam.zoom;
     const margin = 80; // tolérance avant culling
 
+    // Niveau de zoom : on n'affiche les régions secondaires (autres que la
+    // plus grosse par joueur) que lorsque l'utilisateur a zoomé suffisamment
+    // pour les lire confortablement. Sinon on garde l'écran épuré.
+    const zoom = this.camera.zoom;
+    // Seuil de taille minimum pour afficher une région secondaire : décroît
+    // avec le zoom (plus on zoom, plus on voit de petites régions).
+    const secondaryMinSize =
+      zoom < 1.0  ? Infinity :   // jamais
+      zoom < 1.6  ? 60 :         // grosses régions secondaires seulement
+      zoom < 2.4  ? 20 :         // régions moyennes
+                    8;           // toutes (sauf vraiment minuscules)
+
     for (const reg of this.cachedRegions) {
       const p = state.players.get(reg.owner);
       if (!p || !p.alive) continue;
+      // Filtre zoom : régions secondaires (pas primary) seulement si zoom
+      // suffisant ET région assez grosse pour mériter un label.
+      if (!reg.isPrimary && reg.size < secondaryMinSize) continue;
       seen.add(reg.key);
       // Culling : si le centroïde est hors viewport (avec marge), on cache.
       const inView = reg.cx >= camLeft - margin && reg.cx <= camRight + margin
                   && reg.cy >= camTop - margin && reg.cy <= camBottom + margin;
 
-      // Le nom affiché est celui FIXE du joueur (sa nation), pas le nom de
-      // territoire qui change si la région se redécoupe.
-      const displayName = p.name as string;
-
-      // Une seule étiquette par nation → on affiche le TOTAL des troupes
-      // du joueur sur sa plus grosse région.
-      const garrison = Math.floor(p.army);
+      // Primary (plus grosse région) = nation name + total armée.
+      // Secondaire = nom local de la région + armée prorata.
+      const displayName = reg.isPrimary
+        ? (p.name as string)
+        : reg.name;
+      const garrison = reg.isPrimary
+        ? Math.floor(p.army)
+        : Math.floor((reg.size / Math.max(1, p.territoryCount)) * p.army);
 
       const isMe = p.id === myId;
       // Élite (puissance majeure) : tier=strong → label doré, plus grand,
@@ -555,6 +582,49 @@ export class GameEngine {
     });
     for (const [id, g] of this.shipSprites) {
       if (!seen.has(id)) { g.destroy(); this.shipSprites.delete(id); }
+    }
+
+    // ─── Marqueurs de débarquement ──────────────────────────────────────
+    // Pour chaque ship m'appartenant et ayant un landTargetId, on dessine
+    // un repère animé sur la tuile cible (cratère doré pulsé + ancre).
+    this.destMarkerPhase += 0.06; // ~6 cycles / sec à 60 fps
+    const seenMarkers = new Set<string>();
+    const myId = socket.sessionId;
+    state.ships.forEach((ship: any, id: string) => {
+      if (ship.owner !== myId) return;
+      if (ship.landTargetId === null || ship.landTargetId === undefined) return;
+      const tile = state.territoryById?.get(ship.landTargetId);
+      if (!tile) return;
+      seenMarkers.add(id);
+
+      let m = this.shipDestMarkers.get(id);
+      if (!m) {
+        m = new Graphics();
+        this.shipDestMarkers.set(id, m);
+        this.shipLayer.addChild(m);
+      }
+      const cx = (tile.x + 0.5) * CELL_SIZE;
+      const cy = (tile.y + 0.5) * CELL_SIZE;
+      m.clear();
+
+      // Anneau pulsé doré.
+      const pulse = 0.5 + 0.5 * Math.sin(this.destMarkerPhase);
+      const baseR = CELL_SIZE * 1.3;
+      m.circle(0, 0, baseR + pulse * 4).stroke({ width: 1.4, color: 0xf1c40f, alpha: 0.5 + pulse * 0.4 });
+      m.circle(0, 0, baseR - 2).stroke({ width: 2.2, color: 0xffd247, alpha: 0.85 });
+      // Croix de visée intérieure
+      const h = baseR * 0.7;
+      m.moveTo(-h, 0).lineTo(h, 0).stroke({ width: 1, color: 0xffd247, alpha: 0.75 });
+      m.moveTo(0, -h).lineTo(0, h).stroke({ width: 1, color: 0xffd247, alpha: 0.75 });
+      // Petite ancre au centre
+      m.circle(0, 0, 1.5).fill({ color: 0xffd247 });
+
+      m.x = cx;
+      m.y = cy;
+    });
+    // Cleanup des marqueurs périmés (bateau parti, débarqué, ou détruit).
+    for (const [id, g] of this.shipDestMarkers) {
+      if (!seenMarkers.has(id)) { g.destroy(); this.shipDestMarkers.delete(id); }
     }
   }
 

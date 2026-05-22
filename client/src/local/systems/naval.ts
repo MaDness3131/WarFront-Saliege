@@ -168,18 +168,43 @@ export function orderMove(state: LocalGameState, playerId: string, shipId: strin
   s.path = computeShipPath(state, s, x, y);
 }
 
-/** Ordonne à un battleship de débarquer ses troupes sur un territoire côtier. */
+/** Ordonne à un battleship de débarquer ses troupes sur un territoire côtier.
+ *  Le bateau se positionne sur la tuile OCÉAN adjacente à la côte cible —
+ *  il ne dépasse jamais la mer. Le débarquement (et la capture de la tuile
+ *  côtière) est déclenché par attemptLanding() à l'arrivée. */
 export function orderLand(state: LocalGameState, playerId: string, shipId: string, targetId: number) {
   const s = state.ships.get(shipId);
   const t = state.territoryById.get(targetId);
   if (!s || s.owner !== playerId || !t) return;
   if (s.type !== ShipType.Battleship || s.cargo <= 0) return;
   if (t.terrain !== TerrainType.Coast) return;
-  const destX = t.x + 0.5;
-  const destY = t.y + 0.5;
+
+  // Trouve une tuile OCÉAN adjacente à la côte ciblée. C'est là que le
+  // bateau s'arrête — il ne monte pas sur le sable.
+  let oceanX = t.x;
+  let oceanY = t.y;
+  let foundOcean = false;
+  for (const nid of t.neighbors) {
+    const n = state.territoryById.get(nid);
+    if (n && n.terrain === TerrainType.Ocean) {
+      oceanX = n.x;
+      oceanY = n.y;
+      foundOcean = true;
+      break;
+    }
+  }
+  // Fallback : on prend la côte directement si pas d'océan voisin (cas
+  // limite avec petites îles entièrement côte).
+  if (!foundOcean) {
+    oceanX = t.x;
+    oceanY = t.y;
+  }
+
+  const destX = oceanX + 0.5;
+  const destY = oceanY + 0.5;
   s.destX = destX;
   s.destY = destY;
-  s.landTargetId = targetId;
+  s.landTargetId = targetId; // toujours le coast tile pour le débarquement
   s.path = computeShipPath(state, s, destX, destY);
 }
 

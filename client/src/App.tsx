@@ -362,10 +362,11 @@ export function App() {
         }
       }
 
-      // — Tuile propre AVEC casino fini → minijeux solo prioritaires
-      //   (Roulette, Machine à sous). On les met EN TÊTE pour que le clic
-      //   droit sur "mon casino" propose directement les jeux.
-      if (isOwn && tile.building === BuildingType.Casino && tile.buildingLevel > 0) {
+      // — Tuile propre + au moins un Casino possédé n'importe où sur la
+      //   carte → minijeux solo (Roulette, Machine à sous). On les met
+      //   EN TÊTE pour qu'ils soient bien visibles depuis n'importe
+      //   quel clic droit sur ses propres terres.
+      if (isOwn && me.casinoCount > 0) {
         actions.push({
           id: 'roulette', label: 'Roulette', icon: <RouletteIcon size={28} />,
           color: '#c0392b', cost: 'mise libre',

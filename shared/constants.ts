@@ -423,7 +423,7 @@ export const SLOTS_PAYOUTS = [
  * (cf. weapons.ts → detonate). Le champ subsiste pour les imports tiers.
  */
 export const WEAPONS = {
-  nuke:     { cost: 6000,   cooldownTicks: 1800, radius: 9,  damage: 9999, flightTicks: 36, scorchTicks: 0 },
+  nuke:     { cost: 6000,   cooldownTicks: 0,    radius: 9,  damage: 9999, flightTicks: 36, scorchTicks: 0 },
   hydrogen: { cost: 40000,  cooldownTicks: 3600, radius: 23, damage: 9999, flightTicks: 48, scorchTicks: 0 },
   tsar:     { cost: 200000, cooldownTicks: 9000, radius: 60, damage: 9999, flightTicks: 90, scorchTicks: 0 },
 } as const;

@@ -39,7 +39,7 @@ import { CameraState, CellClick } from './GameEngine';
 import { CELL_SIZE } from '@shared/constants';
 
 // ─── Limites ────────────────────────────────────────────────────────────
-const ZOOM_MIN = 0.15;
+const ZOOM_MIN = 0.06; // bumpé : permet de dézoomer ~×2.5 plus loin qu'avant
 const ZOOM_MAX = 4;
 const ZOOM_STEP = 1.12;                // par cran molette
 const DRAG_THRESHOLD = 5;              // px : en-dessous, on traite comme un clic
